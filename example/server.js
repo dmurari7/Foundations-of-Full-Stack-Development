@@ -1,105 +1,196 @@
-const express = require('express');
-const app = express();
-const PORT = 8080;
+const express = require("express");
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const User = require("./models/User");
 
-// Middleware to parse JSON
+// dotenv.config();
+
+const app = express();
 app.use(express.json());
 
-// Mock data
-const users = new Map([
-  [1, { id: 1, name: 'Alice', email: 'alice@example.com' }],
-  [2, { id: 2, name: 'Bob', email: 'bob@example.com' }],
-  [3, { id: 3, name: 'Charlie', email: 'charlie@example.com' }]
-]);
+MONGO_URI = "mongodb://localhost:27017/test"
 
-let nextId = 4;
+// Connect to MongoDB
+mongoose
+  .connect(MONGO_URI)
+  // .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.error(err));
 
-// GET - Root endpoint
-app.get('/', (req, res) => {
-  res.send('Hello World');
+
+// CREATE (POST /users)
+app.post("/users", async (req, res) => {
+  try {
+    const newUser = await User.create(req.body);
+    res.status(201).json(newUser);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
-// GET - API endpoint
-app.get('/api/', (req, res) => {
-  res.send('This is the API endpoint');
+// READ ALL (GET /users)
+app.get("/users", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
 });
 
-// GET - Read all users
-app.get('/api/users', (req, res) => {
-  const allUsers = Array.from(users.values());
-  res.json(allUsers);
-});
-
-// GET - Read single user by ID
-app.get('/api/users/:id', (req, res) => {
-  console.log(req.method, req.url, req.params);
-  const id = parseInt(req.params.id);
-  const user = users.get(id);
-  
-  if (user) {
+// READ ONE (GET /users/:id)
+app.get("/users/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
     res.json(user);
-  } else {
-    res.status(404).json({ message: 'User not found' });
+  } catch {
+    res.status(400).json({ error: "Invalid ID format" });
   }
 });
 
-// POST - Create new user
-app.post('/api/users', (req, res) => {
-  const { name, email } = req.body;
-  
-  if (!name || !email) {
-    return res.status(400).json({ message: 'Name and email are required' });
-  }
-  
-  const newUser = {
-    id: nextId++,
-    name,
-    email
-  };
-  
-  users.set(newUser.id, newUser);
-  res.status(201).json(newUser);
-});
-
-// PUT - Update entire user
-app.put('/api/users/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const { name, email } = req.body;
-  
-  if (!users.has(id)) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-  
-  if (!name || !email) {
-    return res.status(400).json({ message: 'Name and email are required' });
-  }
-  
-  const updatedUser = { id, name, email };
-  users.set(id, updatedUser);
-  res.json(updatedUser);
-});
-
-// DELETE - Remove user
-app.delete('/api/users/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  
-  if (users.has(id)) {
-    users.delete(id);
-    res.json({ message: 'User deleted successfully' });
-  } else {
-    res.status(404).json({ message: 'User not found' });
+// UPDATE (PUT /users/:id)
+app.put("/users/:id", async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(updated);
+  } catch {
+    res.status(400).json({ error: "Invalid ID format" });
   }
 });
 
+// DELETE (DELETE /users/:id)
+app.delete("/users/:id", async (req, res) => {
+  try {
+    const deleted = await User.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "User not found" });
+    res.json({ message: "User deleted" });
+  } catch {
+    res.status(400).json({ error: "Invalid ID format" });
+  }
+});
+
+// GET /users/age-range?min=20&max=30
+app.get("/users/age-range", async (req, res) => {
+  const { min, max } = req.query;
+
+  if (!min || !max) {
+    return res.status(400).json({ error: "min and max query params are required" });
+  }
+
+  try {
+    const users = await User.find({
+      age: { $gte: Number(min), $lte: Number(max) }
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /users/min-age?value=18
+app.get("/users/min-age", async (req, res) => {
+  const { value } = req.query;
+
+  if (!value) {
+    return res.status(400).json({ error: "value query param is required" });
+  }
+
+  try {
+    const users = await User.find({
+      age: { $gte: Number(value) }
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /users/max-age?value=30
+app.get("/users/max-age", async (req, res) => {
+  const { value } = req.query;
+
+  if (!value) {
+    return res.status(400).json({ error: "value query param is required" });
+  }
+
+  try {
+    const users = await User.find({
+      age: { $lte: Number(value) }
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /users/domain?value=dal.ca
+app.get("/users/domain", async (req, res) => {
+  const { value } = req.query;
+
+  if (!value) {
+    return res.status(400).json({ error: "value query param is required" });
+  }
+
+  try {
+    const regex = new RegExp(`@${value}$`, "i"); // e.g. /@dal\.ca$/i
+    const users = await User.find({ email: regex });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /users/search
+// Example: /users/search?minAge=20&maxAge=30&domain=dal.ca&name=has&sort=-age
+
+app.get("/users/search", async (req, res) => {
+  try {
+    const { minAge, maxAge, domain, name, sort } = req.query;
+
+    // Start a mongoose query
+    let query = User.find();
+
+    // Minimum age filter
+    if (minAge) {
+      query = query.where("age").gte(Number(minAge));
+    }
+
+    // Maximum age filter
+    if (maxAge) {
+      query = query.where("age").lte(Number(maxAge));
+    }
+
+    // Filter by email domain
+    if (domain) {
+      const regex = new RegExp(`@${domain}$`, "i");
+      query = query.where("email").regex(regex);
+    }
+
+    // Partial name search (case-insensitive)
+    if (name) {
+      const regex = new RegExp(name, "i");
+      query = query.where("name").regex(regex);
+    }
+
+    // Sorting
+    if (sort) {
+      query = query.sort(sort); 
+      // examples: ?sort=name or ?sort=-age
+    }
+
+    // Execute the query
+    const users = await query;
+
+    res.json(users);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+PORT = 8000
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log('Test endpoints in Postman:');
-  console.log(`  GET    http://localhost:${PORT}/`);
-  console.log(`  GET    http://localhost:${PORT}/api/`);
-  console.log(`  GET    http://localhost:${PORT}/api/users`);
-  console.log(`  GET    http://localhost:${PORT}/api/users/1`);
-  console.log(`  POST   http://localhost:${PORT}/api/users`);
-  console.log(`  PUT    http://localhost:${PORT}/api/users/1`);
-  console.log(`  DELETE http://localhost:${PORT}/api/users/1`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
